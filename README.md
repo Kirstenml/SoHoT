@@ -43,8 +43,8 @@ for i, (x, y) in enumerate(data):
         if torch.argmax(output_softmax[b]) == y[b]:
             num_correct += 1
 
-    # If the number of parameters has changed, update the optimizer such that the new weight parameter
-    # are registered and also updated in the backward pass
+    # If the number of parameters has changed, update the optimizer such that the new weight
+    # parameter are registered and also updated in the backward pass
     if old_params != sum(1 for _ in sohotel.parameters()):
         optim = torch.optim.Adam(sohotel.parameters(), lr=lr)
         old_params = sum(1 for _ in sohotel.parameters())
