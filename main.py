@@ -18,16 +18,16 @@ if __name__ == '__main__':
     nrows = 5000
     seeds = [0, 1, 2, 3, 4]
     # ---------------------------------------- SoHoT Evaluation ----------------------------------------
-    # soft_hoeffding_config = get_parameter_sohot(data_stream)
-    # evaluate_sohotel(data_stream, soft_hoeffding_config, nrows=nrows)
-    #
-    # # --------------------------------- SoHoT Transparency Evaluation ---------------------------------
-    # measure_transparency_sohot(data_stream, nrows=nrows)
-    #
-    # # ---------------------------------------- HT Evaluation ----------------------------------------
-    # limit_n_nodes_ht = False        # limit the number of internal nodes in a Hoeffding tree
-    # hoeffding_config = get_parameter_ht(data_stream, limit_n_nodes_ht)
-    # evaluate_ht(data_stream, hoeffding_config, nrows=nrows)
+    soft_hoeffding_config = get_parameter_sohot(data_stream)
+    evaluate_sohotel(data_stream, soft_hoeffding_config, nrows=nrows)
+
+    # --------------------------------- SoHoT Transparency Evaluation ---------------------------------
+    measure_transparency_sohot(data_stream, nrows=nrows)
+
+    # ---------------------------------------- HT Evaluation ----------------------------------------
+    limit_n_nodes_ht = False        # limit the number of internal nodes in a Hoeffding tree
+    hoeffding_config = get_parameter_ht(data_stream, limit_n_nodes_ht)
+    evaluate_ht(data_stream, hoeffding_config, nrows=nrows)
 
     # ---------------------------------------- TEL Evaluation ----------------------------------------
     # Note: TEL need to be installed manually (Change sys path to TreeEnsembleLayer in testing_tel)
@@ -38,42 +38,3 @@ if __name__ == '__main__':
     #   evaluate_tel(data_stream, limit_depth)
     #   measure_transparency_tel(data_stream)
 
-
-    from benchmark.load_data import get_data_loader
-    from sohot.sohot_ensemble_layer import SoftHoeffdingTreeLayer
-    import torch
-
-    lr = 1e-3
-    batch_size = 32
-    data, input_dim, output_dim, _ = get_data_loader('sea50', batch_size=batch_size, nrows=10000)
-    sohotel = SoftHoeffdingTreeLayer(input_dim, output_dim)
-
-    optim = torch.optim.Adam(sohotel.parameters(), lr=lr)
-    optim.zero_grad()
-    old_params = sum(1 for _ in sohotel.parameters())
-    criterion = torch.nn.CrossEntropyLoss()
-    softmax = torch.nn.Softmax(dim=-1)
-
-    num_correct = 0
-    num_samples = 0
-
-    for i, (x, y) in enumerate(data):
-        output = sohotel(x, y)
-
-        output_softmax = [softmax(out) for out in output.detach()]
-        for b in range(batch_size):
-            num_samples += 1
-            if torch.argmax(output_softmax[b]) == y[b]:
-                num_correct += 1
-
-        # If the number of parameters has changed, 'update' the optimizer
-        if old_params != sum(1 for _ in sohotel.parameters()):
-            optim = torch.optim.Adam(sohotel.parameters(), lr=lr)
-            old_params = sum(1 for _ in sohotel.parameters())
-
-        loss = criterion(output, y)
-        loss.backward()
-        optim.step()
-        optim.zero_grad()
-    accuracy = num_correct / num_samples
-    print("Accuracy: {:.4f}".format(accuracy))
