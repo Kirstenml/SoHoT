@@ -14,6 +14,7 @@ SoHoT can be used in an ensemble layer due to its differentiability.
 ```python
 from benchmark.load_data import get_data_loader
 from sohot.sohot_ensemble_layer import SoftHoeffdingTreeLayer
+from sohot.tree_visualization import visualize_soft_hoeffding_tree
 import torch
 
 lr = 1e-3
@@ -54,4 +55,7 @@ for i, (x, y) in enumerate(data):
     optim.zero_grad()
 
 print("Accuracy: {:.4f}".format(num_correct / num_samples))
+
+# Visualize the first tree in the ensemble
+visualize_soft_hoeffding_tree(sohotel.sohots[0])
 ```

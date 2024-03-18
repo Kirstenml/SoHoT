@@ -12,43 +12,38 @@ Note: Edge probabilities are visualized with 3 decimals, therefore probability 1
 '''
 
 
-def visualize_soft_hoeffding_tree(sht, X=None, learning_rate=0, print_idx=0, save_img=False, attribute_list={}):
-    max_depth = sht.max_depth
-    smooth_step_param = sht.smooth_step_param
-    split_confidence = sht.split_confidence
-    tie_threshold = sht.tie_threshold
-    grace_period = sht.grace_period
+def visualize_soft_hoeffding_tree(sohot, X=None, print_idx=0, save_img=False, attribute_list={}):
     G = nx.Graph()
     node_label = {}
     edge_label = {}
-    G.add_node(sht.root)
+    G.add_node(sohot.root)
     no_edge_labels = False
     if X is None:
         # do not print edge labels
         no_edge_labels = True
 
-    if isinstance(sht.root, LeafNode):
-        node_label[sht.root] = "w: {}, \n Pr: {:.2f}".format(sht.weights[sht.root.orientation_sequence].data.numpy(),
-                                                             sht.root.sample_to_node_prob)
+    if isinstance(sohot.root, LeafNode):
+        node_label[sohot.root] = "w: {}, \n Pr: {:.2f}".format(sohot.weights[sohot.root.orientation_sequence].data.numpy(),
+                                                               sohot.root.sample_to_node_prob)
         nx.draw(G, labels=node_label, with_labels=True)
         plt.show()
         return
 
     if len(attribute_list) == 0:
-        node_label[sht.root] = "Split Attr: {}, \nValue:{:.3f}".format(sht.root.split_test.feature,
-                                                                       sht.root.split_test.split_at)
+        node_label[sohot.root] = "Split Attr: {}, \nValue:{:.3f}".format(sohot.root.split_test.feature,
+                                                                         sohot.root.split_test.split_at)
     else:
-        node_label[sht.root] = "If {} > {:.3f}".format(attribute_list[sht.root.split_test.feature],
-                                                       sht.root.split_test.split_at)
-    if sht.root.right_leaf is None:
-        to_traverse = [sht.root.right]
+        node_label[sohot.root] = "If {} > {:.3f}".format(attribute_list[sohot.root.split_test.feature],
+                                                         sohot.root.split_test.split_at)
+    if sohot.root.right_leaf is None:
+        to_traverse = [sohot.root.right]
     else:
-        to_traverse = [sht.root.right_leaf]
-    if sht.root.left_leaf is None:
-        to_traverse.append(sht.root.left)
+        to_traverse = [sohot.root.right_leaf]
+    if sohot.root.left_leaf is None:
+        to_traverse.append(sohot.root.left)
     else:
-        to_traverse.append(sht.root.left_leaf)
-    previous = [sht.root, sht.root]
+        to_traverse.append(sohot.root.left_leaf)
+    previous = [sohot.root, sohot.root]
 
     while to_traverse:
         i = to_traverse.pop()
@@ -56,7 +51,7 @@ def visualize_soft_hoeffding_tree(sht, X=None, learning_rate=0, print_idx=0, sav
         G.add_node(i)
         G.add_edge(prev, i)
         orientation_seq = prev.orientation_sequence
-        weight_vec = sht.weights[orientation_seq]
+        weight_vec = sohot.weights[orientation_seq]
 
         if isinstance(i, Node):
             if len(attribute_list) == 0:
@@ -86,20 +81,9 @@ def visualize_soft_hoeffding_tree(sht, X=None, learning_rate=0, print_idx=0, sav
                 else:
                     edge_label[(prev, i)] = "{:.6f}".format(1. - prev.forward(X, weight_vec))
 
-    pos = hierarchy_pos(G, sht.root)
+    pos = hierarchy_pos(G, sohot.root)
     ax = plt.gca()
-    if not no_edge_labels:
-        ax.set_title("Soft Hoeffding Tree"
-                     #"\n(max depth:{}, smooth step $\delta$:{}, Hoeffding $\delta$:{}, \nlr:{}, tie_threshold:{}, "
-                     #"grace_period:{}) \n Input X={}"
-                     .format(max_depth, 1./smooth_step_param, split_confidence, learning_rate, tie_threshold,
-                             grace_period, X.data.numpy()))
-    else:
-        ax.set_title("Soft Hoeffding Tree"
-                     #"\n(max depth:{}, smooth step $\delta$:{}, Hoeffding $\delta$:{}, \nlr:{}, tie_threshold:{}, "
-                     #"grace_period:{})"
-                     .format(max_depth, 1./smooth_step_param, split_confidence, learning_rate, tie_threshold,
-                             grace_period))
+    ax.set_title("Soft Hoeffding Tree")
     nx.draw(G, pos=pos, labels=node_label, node_color='#8FAADC', font_size=7, with_labels=True, verticalalignment='top')
     if not no_edge_labels:
         nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_label, font_size=7)
