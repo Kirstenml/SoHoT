@@ -3,10 +3,11 @@
   <img src="sohot.png" alt="drawing" width="400"/>
 </p>
 
-This repository contains a new predictive base learner Soft Hoeffding Tree (SoHoT) for large data streams.
+This repository contains a new predictive base learner Soft Hoeffding Tree (SoHoT) for large and drifting data streams.
+A SoHoT combines the extensibility and transparency of Hoeffding trees with the differentiability of soft trees.
 A new gating function is used to regulate the balance between transparent and soft routing in a SoHoT, 
 which is essentially a trade-off between transparency and performance. 
-SoHoT can be used in an ensemble layer due to its differentiability.
+SoHoT can be used in a neural network due to its differentiability.
 
 
 
@@ -21,7 +22,7 @@ lr = 1e-3
 batch_size = 32
 data_stream = 'sea50'
 # Load data
-data, input_dim, output_dim, _ = get_data_loader(data_stream, batch_size=batch_size, nrows=10000)
+data, input_dim, output_dim = get_data_loader(data_stream, batch_size=batch_size, nrows=10000)
 sohotel = SoftHoeffdingTreeLayer(input_dim, output_dim)
 
 # Initialize an Optimizer

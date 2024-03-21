@@ -4,6 +4,7 @@ import numpy as np
 import torch
 from benchmark.evaluate_ht.read_data_ht import load_data_ht, get_output_dims
 
+# Set path to data directory
 DATA_DIR = ""
 # Area under ROC curve
 positive_class = 1

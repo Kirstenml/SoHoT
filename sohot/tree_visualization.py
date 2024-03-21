@@ -23,8 +23,9 @@ def visualize_soft_hoeffding_tree(sohot, X=None, print_idx=0, save_img=False, at
         no_edge_labels = True
 
     if isinstance(sohot.root, LeafNode):
-        node_label[sohot.root] = "w: {}, \n Pr: {:.2f}".format(sohot.weights[sohot.root.orientation_sequence].data.numpy(),
-                                                               sohot.root.sample_to_node_prob)
+        node_label[sohot.root] = "w: {}, \n Pr: {:.2f}".format(
+            sohot.weights[sohot.root.orientation_sequence].data.numpy(),
+            sohot.root.sample_to_node_prob)
         nx.draw(G, labels=node_label, with_labels=True)
         plt.show()
         return
@@ -57,7 +58,7 @@ def visualize_soft_hoeffding_tree(sohot, X=None, print_idx=0, save_img=False, at
             if len(attribute_list) == 0:
                 node_label[i] = "Split Attr: {}, \nValue:{:.3f}".format(i.split_test.feature, i.split_test.split_at)
             else:
-                node_label[i] =  "If {} > {:.3f}".format(attribute_list[i.split_test.feature], i.split_test.split_at)
+                node_label[i] = "If {} > {:.3f}".format(attribute_list[i.split_test.feature], i.split_test.split_at)
             if not no_edge_labels:
                 if prev.left is i:
                     edge_label[(prev, i)] = "{:.6f}".format(prev.forward(X, weight_vec))
@@ -89,7 +90,7 @@ def visualize_soft_hoeffding_tree(sohot, X=None, print_idx=0, save_img=False, at
         nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_label, font_size=7)
 
     if save_img:
-        plt.savefig("evaluation/gif/sht_{}".format(print_idx))
+        plt.savefig("evaluation/sohot_{}".format(print_idx))
         plt.clf()
     else:
         plt.show()
@@ -97,31 +98,6 @@ def visualize_soft_hoeffding_tree(sohot, X=None, print_idx=0, save_img=False, at
 
 # source: https://stackoverflow.com/questions/29586520/can-one-get-hierarchical-graphs-from-networkx-with-python-3/29597209#29597209
 def hierarchy_pos(G, root=None, width=1., vert_gap=0.2, vert_loc=0, xcenter=0.5):
-    '''
-    From Joel's answer at https://stackoverflow.com/a/29597209/2966723.
-    Licensed under Creative Commons Attribution-Share Alike
-
-    If the graph is a tree this will return the positions to plot this in a
-    hierarchical layout.
-
-    G: the graph (must be a tree)
-
-    root: the root node of current branch
-    - if the tree is directed and this is not given,
-      the root will be found and used
-    - if the tree is directed and this is given, then
-      the positions will be just for the descendants of this node.
-    - if the tree is undirected and not given,
-      then a random choice will be used.
-
-    width: horizontal space allocated for this branch - avoids overlap with other branches
-
-    vert_gap: gap between levels of hierarchy
-
-    vert_loc: vertical location of root
-
-    xcenter: horizontal location of root
-    '''
     if not nx.is_tree(G):
         raise TypeError('cannot use hierarchy_pos on a graph that is not a tree')
 

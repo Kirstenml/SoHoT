@@ -5,6 +5,7 @@ import random
 
 DATA_DIR = ""
 
+
 def one_hot_encoding_target(y, output_logits_dim):
     y_one_hot = []
     for y_i in y:
@@ -12,6 +13,7 @@ def one_hot_encoding_target(y, output_logits_dim):
         y_vec[int(y_i)] = 1
         y_one_hot.append(y_vec)
     return y_one_hot
+
 
 def transform_river_dataset_to_array(data, output_dim):
     x, y = [], []
@@ -22,6 +24,7 @@ def transform_river_dataset_to_array(data, output_dim):
         x.append(x_vec)
         y.append(y_vec)
     return x, y
+
 
 def read_data_tel(dataset_name, nrows=None, oversample_rate=75, seed=42):
     if dataset_name.startswith('sea'):
@@ -101,7 +104,8 @@ def read_data_tel(dataset_name, nrows=None, oversample_rate=75, seed=42):
         x_one_hot = []
         for val in x:
             row = [val[0], val[1], val[2]]
-            row.extend([float(val[3] == 0), float(val[3] == 1), float(val[3] == 2), float(val[3] == 3), float(val[3] == 4)])
+            row.extend(
+                [float(val[3] == 0), float(val[3] == 1), float(val[3] == 2), float(val[3] == 3), float(val[3] == 4)])
             car = [0] * 20
             car[int(val[4]) - 1] = 1
             row.extend(car)
@@ -111,7 +115,7 @@ def read_data_tel(dataset_name, nrows=None, oversample_rate=75, seed=42):
             row.extend(val[6:])
             x_one_hot.append(row)
         x = x_one_hot
-        # ----------------------- PMLB SYNTH Data -------------------------
+    # ----------------------- PMLB SYNTH Data -------------------------
     elif dataset_name.__eq__('sleep'):
         data = pd.read_csv('{}data/generated/seed_{}/oversample_0.{}/sleep.csv'.format(DATA_DIR, seed, oversample_rate),
                            sep=',', skiprows=1, header=None, nrows=nrows)

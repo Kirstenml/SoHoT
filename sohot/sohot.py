@@ -20,7 +20,7 @@ class SoftHoeffdingTree(nn.Module):
                  smooth_step_param=1.0,
                  alpha=0.3,
                  split_confidence=1e-6,
-                 split_criterion='info_gain',    # 'gini'
+                 split_criterion='info_gain',  # 'gini'
                  tie_threshold=0.05,
                  grace_period=600,
                  remove_poor_attrs=False,
@@ -34,11 +34,11 @@ class SoftHoeffdingTree(nn.Module):
         :type output_dim: int
         :param max_depth: Maximum depth the tree can reach
         :type max_depth: int
-        :param smooth_step_param: Smooth-step parameter 1/gamma from Tree Ensemble Layer
+        :param smooth_step_param: Smooth-step parameter is equal to 1/gamma from Tree Ensemble Layer
         :type smooth_step_param: float
         :param alpha: Transparency regulator with 0 <= alpha <= 1, values closer to 0 yield to a more transparent SoHoT
         :type alpha: float
-        :param split_confidence:
+        :param split_confidence: Significance level (given by 1 - split_confidence) to calculate the Hoeffding bound
         :type split_confidence: float
         :param split_criterion: Split criterion (Information gain, Gini index or Hellinger Distance)
         :type split_criterion: str
@@ -46,7 +46,7 @@ class SoftHoeffdingTree(nn.Module):
         :type tie_threshold: float
         :param grace_period: Number of instances a leaf should observe between split attempts
         :type grace_period: int
-        :param remove_poor_attrs:
+        :param remove_poor_attrs: If True, disable poor attributes
         :type remove_poor_attrs: bool
         :param min_branch_fraction: The minimum percentage of observed data required for branches resulting from split candidates
         :type min_branch_fraction: float
@@ -58,7 +58,7 @@ class SoftHoeffdingTree(nn.Module):
         self.output_dim = output_dim
         self.max_depth = max_depth
         self.smooth_step_param = smooth_step_param
-        self.alpha = alpha      # Transparency parameter to control trade-off in gating function
+        self.alpha = alpha  # Transparency parameter to control trade-off in gating function
         self.split_confidence = split_confidence
 
         # River denotes this parameter tau not tie_threshold
@@ -113,11 +113,11 @@ class SoftHoeffdingTree(nn.Module):
         return output
 
     def add_parameter(self, name, shape, device, init_tensor=None):
-        # self.weights.update({name: torch.FloatTensor(shape).uniform_(-0.01, 0.01).to(device)})
         if init_tensor is not None:
             self.weights.update({name: nn.Parameter(init_tensor, requires_grad=True)})
         else:
-            self.weights.update({name: nn.Parameter(torch.FloatTensor(shape).uniform_(-0.01, 0.01), requires_grad=True)})
+            self.weights.update(
+                {name: nn.Parameter(torch.FloatTensor(shape).uniform_(-0.01, 0.01), requires_grad=True)})
 
     def remove_parameter(self, name):
         self.weights.pop(name)
@@ -126,23 +126,19 @@ class SoftHoeffdingTree(nn.Module):
     def _hoeffding_bound(range_val, confidence, n):
         return np.sqrt((range_val * range_val * np.log(1.0 / confidence)) / (2.0 * n))
 
-
     def split_leaf(self, leaf, previous_node, split_decision_summary, children_stats):
         device = self.weights[leaf.orientation_sequence].device
         self.remove_parameter(leaf.orientation_sequence)
         new_internal_node, leaf_init_tensor = leaf.split(previous_node, self.output_dim, self.smooth_step_param,
-                                       split_decision_summary, children_stats)
+                                                         split_decision_summary, children_stats)
         # Set parameter alpha for gating through the tree
         new_internal_node.alpha = self.alpha
-        # Set init value to w := (0, ..., 0, 0.01 or 0.1, 0, ..., 0) with entry != 0 on position of split feature
-        # init_tensor = torch.zeros(self.input_dim, dtype=torch.float32, device=device)
-        # init_tensor[split_decision_summary.feature] = 0.1
         self.add_parameter(new_internal_node.orientation_sequence, self.input_dim, device)
         # Set init values from LeafNode.split function
-        self.add_parameter(new_internal_node.left_leaf.orientation_sequence, self.output_dim, device, leaf_init_tensor[0])
-        self.add_parameter(new_internal_node.right_leaf.orientation_sequence, self.output_dim, device, leaf_init_tensor[1])
-        # self.add_parameter(new_internal_node.left_leaf.orientation_sequence, self.output_dim, device)
-        # self.add_parameter(new_internal_node.right_leaf.orientation_sequence, self.output_dim, device)
+        self.add_parameter(new_internal_node.left_leaf.orientation_sequence, self.output_dim, device,
+                           leaf_init_tensor[0])
+        self.add_parameter(new_internal_node.right_leaf.orientation_sequence, self.output_dim, device,
+                           leaf_init_tensor[1])
         if previous_node is None:
             self.root = new_internal_node
             self.root.sample_to_node_prob = 1.
@@ -189,7 +185,6 @@ class SoftHoeffdingTree(nn.Module):
                 split_decision = best_split_suggestions[-1]
                 if split_decision.feature is not None:
                     # Finally, split leaf node
-                    # to remember the split criterion for transparency
                     split_decision_summary = SplitDecision(feature=split_decision.feature,
                                                            split_at=split_decision.split_info)
                     self.split_leaf(leaf, previous_node, split_decision_summary, split_decision.children_stats)
@@ -228,7 +223,7 @@ class SoftHoeffdingTree(nn.Module):
             if isinstance(i, Node):
                 current_depth = (len(i.orientation_sequence) - 1)
                 output += "    " * current_depth + "{}: Internal weight = {}, \n".format(current_depth,
-                                                                                       node_weight.data.numpy())
+                                                                                         node_weight.data.numpy())
                 if i.split_test:
                     output += "    " * current_depth + "   {}\n".format(i.split_test)
                 if i.right_leaf is None:

@@ -123,7 +123,6 @@ class SoHoTFunction(torch.autograd.Function):
                         if sample_to_node_c_leaf > EPSILON:
                             class_idx = y.item()
                             n.update_stats(class_idx)
-                            # Better use x_raw to update attribute observer for transparency
                             n.update_splitters(x, class_idx)
 
                 # process an internal node only if it is fractional (i.e., belongs to the fractional tree, see TEL)
@@ -162,7 +161,7 @@ class SoHoTFunction(torch.autograd.Function):
         _, grads_parameter = zip(*[(k, v) for k, v in grad_weights.items()])
         return grad_loss_wrt_x, None, None, None, None, None, *grads_parameter
 
-    # Update SHT, i.e. try to extend the tree based on the already processed samples stored in the leaves
+    # Update SoHoT, i.e. try to extend the tree based on the already processed samples stored in the leaves
     @staticmethod
     def _update_tree_structure(model, max_depth):
         # iterate over all leaves but also store internal nodes

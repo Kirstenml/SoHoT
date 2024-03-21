@@ -14,11 +14,13 @@ def measure_transparency_sohot(data_stream, nrows=None, oversample_rate=75,
                                device="cpu", average_output=False, tie_threshold=0.05,
                                ensemble_seeds=None, alpha=0.3):
     # --------------------- Reset the data loader and set a new seed --------------------------------------------
-    data, input_dim, output_dim, _ = get_data_loader(data_stream, batch_size=32, nrows=nrows,
-                                                     oversample_rate=oversample_rate, seed=seed)
+    data, input_dim, output_dim = get_data_loader(data_stream, batch_size=32, nrows=nrows,
+                                                  oversample_rate=oversample_rate, seed=seed)
+
     # --------------------- Soft Hoeffding Tree------------------------------------------------------------------
     def init_optimizer(parameters):
         return torch.optim.Adam(parameters, betas=(0.9, 0.999), eps=1e-7, lr=lr, weight_decay=weight_decay)
+
     softmax = torch.nn.Softmax(dim=-1)
     sohotel = SoftHoeffdingTreeLayer(input_dim, output_dim, ssp=ssp, max_depth=max_depth, trees_num=trees_num,
                                      average_output=average_output, tie_threshold=tie_threshold, seeds=ensemble_seeds,
@@ -36,7 +38,7 @@ def measure_transparency_sohot(data_stream, nrows=None, oversample_rate=75,
     num_samples = 0
     # Measure transparency
     relevant_features = 0
-    total_num_relevant_features = 0
+    total_num_decision_rules = 0
     num_features = 2
     for i, (X, y) in enumerate(data):
         X = X.to(device)
@@ -72,10 +74,11 @@ def measure_transparency_sohot(data_stream, nrows=None, oversample_rate=75,
                     num_features = len(w_i)
                     average_percentage = 1 / num_features
                     impact = sum([1 if impact >= average_percentage else 0 for impact in percentage_feature_impact])
-                    relevant_features += impact
-                    total_num_relevant_features += 1
+                    impact_split_criterion = int(1 - alpha >= average_percentage)
+                    relevant_features += impact + impact_split_criterion
+                    total_num_decision_rules += 1
 
-    average_relevant_features = relevant_features / total_num_relevant_features
+    average_relevant_features = relevant_features / total_num_decision_rules
     print("SoHoT on {}: Average number of  important features: {:.4f}, "
           "Total number of features: {} \n"
           "\tAverage ratio important feature per decision rule {:.4f}".format(data_stream, average_relevant_features,
@@ -83,11 +86,12 @@ def measure_transparency_sohot(data_stream, nrows=None, oversample_rate=75,
                                                                               average_relevant_features / num_features))
 
 
-def call_sht(data, input_dim, output_dim, lr=1e-3, ssp=1, max_depth=7, trees_num=10, weight_decay=0, device="cpu",
-             average_output=False, tie_threshold=0.05, ensemble_seeds=None, alpha=0.3):
+def call_sohot(data, input_dim, output_dim, lr=1e-3, ssp=1, max_depth=7, trees_num=10, weight_decay=0, device="cpu",
+               average_output=False, tie_threshold=0.05, ensemble_seeds=None, alpha=0.3):
     # Choose initial values from Tensorflow's Adam
     def init_optimizer(parameters):
         return torch.optim.Adam(parameters, betas=(0.9, 0.999), eps=1e-7, lr=lr, weight_decay=weight_decay)
+
     softmax = torch.nn.Softmax(dim=-1)
     sohotel = SoftHoeffdingTreeLayer(input_dim, output_dim, ssp=ssp, max_depth=max_depth, trees_num=trees_num,
                                      average_output=average_output, tie_threshold=tie_threshold, seeds=ensemble_seeds,
@@ -150,19 +154,19 @@ def call_sht(data, input_dim, output_dim, lr=1e-3, ssp=1, max_depth=7, trees_num
 def evaluate_sohotel(data_stream, config, nrows=None, oversample_rate=75, seed=0, device='cpu',
                      write_eval_to_file=False):
     # --------------------- Reset the data loader and set a new seed --------------------------------------------
-    loader, input_dim, output_dim, _ = get_data_loader(data_stream, batch_size=config['batch_size'],
-                                                       nrows=nrows, oversample_rate=oversample_rate,
-                                                       seed=seed)
+    loader, input_dim, output_dim = get_data_loader(data_stream, batch_size=config['batch_size'],
+                                                    nrows=nrows, oversample_rate=oversample_rate,
+                                                    seed=seed)
     # --------------------- Soft Hoeffding Tree------------------------------------------------------------------
     evaluation_metrics, ce_losses, extension_at_batch \
-        = call_sht(loader, input_dim, output_dim, lr=config['lr'],
-                   ssp=config['ssp'], max_depth=config['max_depth'],
-                   trees_num=config['trees_num'], device=device,
-                   weight_decay=config['weight_decay'],
-                   average_output=config['average_output'],
-                   tie_threshold=config['tie_threshold'],
-                   ensemble_seeds=config['ensemble_seeds'],
-                   alpha=config['alpha'])
+        = call_sohot(loader, input_dim, output_dim, lr=config['lr'],
+                     ssp=config['ssp'], max_depth=config['max_depth'],
+                     trees_num=config['trees_num'], device=device,
+                     weight_decay=config['weight_decay'],
+                     average_output=config['average_output'],
+                     tie_threshold=config['tie_threshold'],
+                     ensemble_seeds=config['ensemble_seeds'],
+                     alpha=config['alpha'])
     print("SoHoT with seed {} on data stream {} "
           "with current AUROC {:.4f} and ce loss {:.4f}.".format(seed, data_stream, evaluation_metrics['roc_auc'],
                                                                  evaluation_metrics['avg_cross_entropy']),
@@ -183,11 +187,12 @@ def evaluate_ht(data_stream, hoeffding_config={}, oversample_rate=75, nrows=None
                                                               seed=seed)
     print("HT{} with seed {} on data stream {} "
           "with current AUROC {:.4f} and ce loss {:.4f}.".format(
-            '_limited' if hoeffding_config['num_internal_nodes'] is not None else '',
-            seed, data_stream, evaluation_metrics_ht['roc_auc'], evaluation_metrics_ht['avg_cross_entropy'])
-          )
+        '_limited' if hoeffding_config['num_internal_nodes'] is not None else '',
+        seed, data_stream, evaluation_metrics_ht['roc_auc'], evaluation_metrics_ht['avg_cross_entropy'])
+    )
     if write_eval_to_file:
-        write_loss_to_file(losses_ht, accuracy=evaluation_metrics_ht['accuracy'], auroc=evaluation_metrics_ht['roc_auc'],
+        write_loss_to_file(losses_ht, accuracy=evaluation_metrics_ht['accuracy'],
+                           auroc=evaluation_metrics_ht['roc_auc'],
                            ce_loss_avg=evaluation_metrics_ht['avg_cross_entropy'],
                            dataset_name='ht{}_'.format('_limited' if hoeffding_config['num_internal_nodes'] is not None
                                                        else '') + data_stream,

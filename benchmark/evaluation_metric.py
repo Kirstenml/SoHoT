@@ -1,9 +1,4 @@
-"""
-
-Evaluation methods for streaming data
-source: Gama et al. 'On evaluating stream learning algorithms', 2011.
-
-"""
+# Evaluation metrics for streaming data
 import numpy as np
 
 

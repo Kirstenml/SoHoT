@@ -1,4 +1,8 @@
 import pandas as pd
+import os
+
+if not os.path.exists("evaluation"): os.makedirs("evaluation")
+if not os.path.exists("evaluation/losses"): os.makedirs("evaluation/losses")
 
 
 def write_loss_to_file(losses, accuracy, auroc, ce_loss_avg=0, dataset_name='', seed=0, extension_at_batch=[]):

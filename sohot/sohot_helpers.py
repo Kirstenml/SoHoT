@@ -10,6 +10,7 @@ Same implementation of soft activations from TEL implementation:
 https://github.com/google-research/google-research/blob/master/tf_trees/neural_trees_helpers.cc
 '''
 
+
 def soft_activation(v, smooth_step_param):
     if v <= -0.5 / smooth_step_param:
         out = 0.

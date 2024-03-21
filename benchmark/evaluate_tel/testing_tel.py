@@ -2,6 +2,7 @@
 #       Works only with Tensorflow version 2.9.0
 #   See: https://github.com/google-research/google-research/tree/master/tf_trees
 import sys
+
 sys.path.insert(1, '/home/user/TreeEnsembleLayer')
 from tf_trees import TEL
 import tensorflow as tf
@@ -46,9 +47,8 @@ def call_tel(x, y, output_logits_dim, trees_num=10, depth=7, learning_rate=0.001
 
     y_true_idx = []
     y_pred_values = []
-    # Average cross entropy loss
+    # Average cross-entropy loss
     ce_losses = []
-    # criterion = torch.nn.CrossEntropyLoss(reduction='none')
     for i in range(0, len(x), batch_size):
         x_batch = x[i:i + batch_size]
         y_batch = y[i:i + batch_size]
@@ -69,10 +69,8 @@ def call_tel(x, y, output_logits_dim, trees_num=10, depth=7, learning_rate=0.001
     cross_entropy_avg = np.mean(ce_losses)
     if write_losses_to_file:
         write_loss_to_file(losses=ce_losses, roc_auc=auroc, cross_entropy_avg=cross_entropy_avg,
-                           dataset_name='tel/' + dataset_name,
-                           seed=seed, limited_depth=(depth == 3))
+                           dataset_name='tel/' + dataset_name, seed=seed, limited_depth=(depth == 3))
     return auroc, cross_entropy_avg
-
 
 
 def measure_transparency_tel(data_stream, trees_num=1, depth=7, learning_rate=0.001, batch_size=32, seed=0,
@@ -110,7 +108,7 @@ def measure_transparency_tel(data_stream, trees_num=1, depth=7, learning_rate=0.
                 x_dot_w_inner = abs(np.sum(x_dot_w_outer))
                 percentage_feature_impact = [x_dot_w_outer[j] / x_dot_w_inner for j in range(len(x_dot_w_outer))]
                 num_features = len(w_i)
-                average_percentage = 1/num_features
+                average_percentage = 1 / num_features
                 impact = sum([1 if impact >= average_percentage else 0 for impact in percentage_feature_impact])
                 relevant_features += impact
                 total_num_relevant_features += 1
@@ -123,20 +121,20 @@ def measure_transparency_tel(data_stream, trees_num=1, depth=7, learning_rate=0.
                                                                               num_features,
                                                                               average_relevant_features / num_features))
 
+
 # -----------------------------------------------------------------------------------------------------------------
 # ---------------------------------------------------- write to file-----------------------------------------------
 # -----------------------------------------------------------------------------------------------------------------
 
-def write_loss_to_file(losses, roc_auc, cross_entropy_avg, dataset_name='', seed=0, window_size=200, limited_depth=False):
-
+def write_loss_to_file(losses, roc_auc, cross_entropy_avg, dataset_name='', seed=0, limited_depth=False):
     # ---------------------- Prequential Evaluation------------------------------------------------------------------
     sample_idx = range(len(losses))
     # columns: Cross Entropy Loss using class probabilities, Fading losses
     df = pd.DataFrame({'Sample': sample_idx,
                        'CE Loss TEL': losses})
     f = open('evaluation/losses/{}_losses_tel{}_seed_{}.csv'.format(dataset_name,
-                                                                           '_limit' if limited_depth else '',
-                                                                           seed), "w")
+                                                                    '_limit' if limited_depth else '',
+                                                                    seed), "w")
     f.write('# TEL roc auc: {}, ce loss avg: {} \n'.format(roc_auc, cross_entropy_avg))
     df.to_csv(f, index=False, lineterminator='\n')
     f.close()
