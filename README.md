@@ -1,7 +1,4 @@
 # Soft Hoeffding Tree
-<p align="center">
-  <img src="sohot.png" alt="drawing" width="400"/>
-</p>
 
 This repository contains a new predictive base learner Soft Hoeffding Tree (SoHoT) for large and drifting data streams.
 A SoHoT combines the extensibility and transparency of Hoeffding trees with the differentiability of soft trees.
