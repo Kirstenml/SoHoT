@@ -7,6 +7,7 @@ K_TOLERANCE = 0     # 1e-10
 # If probability to reach the current leaf node > EPSILON then update leaf node statistics
 EPSILON = 0.25
 
+gradient_norms = {}
 
 class SoHoTFunction(torch.autograd.Function):
     @staticmethod
@@ -52,7 +53,6 @@ class SoHoTFunction(torch.autograd.Function):
                 output = torch.add(output, i.forward(i.sample_to_node_prob, weight_vec))
         return output, sample_to_node_batch
 
-
     @staticmethod
     def forward(inputs, smooth_step_param, max_depth, model, targets, *args):
         batch_size = inputs.size(dim=0)
@@ -69,9 +69,8 @@ class SoHoTFunction(torch.autograd.Function):
         # Return sample_to_node_batch to store the intermediate result in the setup_context and use it in the backward
         return outputs, sample_to_node_batch
 
-
     @staticmethod
-    # inputs is a Tuple of all of the inputs passed to forward.
+    # inputs is a Tuple of all the inputs passed to forward.
     # output is the output of the forward().
     def setup_context(ctx, inputs, output):
         inp, smooth_step_param, max_depth, model, targets, ks, *vs = inputs

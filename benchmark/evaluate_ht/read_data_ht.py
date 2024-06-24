@@ -2,14 +2,13 @@ import random
 import pandas as pd
 from river import datasets
 
-# Set path to data directory
-DATA_DIR = ''
-
+# TODO Set directory to data
+DATA_DIR = ""
 
 def get_output_dims(data):
     output_dims = {'sea50': 2, 'sea5E5': 2, 'hyperplane10_0001': 2, 'hyperplane10_001': 2,
                    'randomrbf50_0001': 5, 'randomrbf50_001': 5,
-                   'agrawal_abrupt_drift': 2, 'agrawal_gradual_drift': 2,
+                   'agrawal_abrupt_drift': 2, 'agrawal_perturbation': 2,
                    'sleep': 5, 'nursery': 4, 'twonorm': 2, 'ann_thyroid': 3, 'satimage': 6, 'optdigits': 10,
                    'churn': 2, 'texture': 11, 'spambase': 2,
                    'poker': 10, 'kdd99': 23, 'covertype': 7, 'epsilon': 2
@@ -239,6 +238,7 @@ def load_data_ht(dataset_name, nrows=None, synthetic_generated=True, oversample_
                    'warezmaster.': 12, 'pod.': 13, 'rootkit.': 14, 'phf.': 15, 'guess_passwd.': 16, 'teardrop.': 17,
                    'loadmodule.': 18, 'nmap.': 19, 'buffer_overflow.': 20, 'imap.': 21, 'back.': 22}
         y = [targets[val] for val in y]
+        # Reformatting of the data to River format takes ages, it is best to perform the zipping only during evaluation
         data = zip(river_input_format(x), y)
         nominal_attributes = [1, 2, 3]
     return data, nominal_attributes

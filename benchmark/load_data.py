@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from river import datasets
 import random
 
+# TODO Set directory to data
 DATA_DIR = ""
 
 
@@ -36,17 +37,19 @@ def get_data_loader(dataset_name, batch_size=32, nrows=None, drop_last=True, ret
         output_dim = 2
         input_dim = 10
     elif dataset_name.startswith('agrawal'):
-        abrupt_drift, random_abrupt_drift, perturbation = False, False, 0.0
+        abrupt_drift, random_abrupt_drift, perturbation, gradual_drift = False, False, 0.0, False
         param = dataset_name[8:]
         if param.startswith('abrupt'):
             abrupt_drift = True
         elif param.startswith('random_abrupt'):
             random_abrupt_drift = True
+        elif param.startswith('gradual'):
+            gradual_drift = True
         else:
             perturbation = 0.2
         if nrows is None: nrows = 10 ** 7
         data = Agrawal(nrows=nrows, seed=seed, abrupt_drift=abrupt_drift, perturbation=perturbation,
-                       random_abrupt_drift=random_abrupt_drift)
+                       random_abrupt_drift=random_abrupt_drift, gradual_drift=gradual_drift)
         input_dim = 40
         output_dim = 2
     # ----------------------- PMLB SYNTH Data -----------------------
@@ -171,7 +174,7 @@ class RandomRBFDrift(Dataset):
 
 class Agrawal(Dataset):
     def __init__(self, nrows=None, seed=42, abrupt_drift=False, perturbation=0.0, num_drifts=9,
-                 random_abrupt_drift=False):
+                 random_abrupt_drift=False, gradual_drift=False):
         dataset = datasets.synth.Agrawal(seed=seed, perturbation=perturbation)
         if abrupt_drift:
             data_sliced = []
@@ -191,6 +194,13 @@ class Agrawal(Dataset):
                     data_sliced.append((x_i, y_i))
                 dataset.generate_drift()
             data = data_sliced
+        elif gradual_drift:
+            dataset = datasets.synth.ConceptDriftStream(
+                stream=datasets.synth.Agrawal(seed=seed, classification_function=0),
+                drift_stream=datasets.synth.Agrawal(seed=seed, classification_function=1),
+                seed=seed, position=nrows//2, width=nrows//100
+            )
+            data = dataset.take(nrows)
         else:
             data = dataset.take(nrows)
         self.X_train, self.y_train = transform_river_dataset_to_torch(data, encoding_fn=Agrawal.one_hot_encoding)

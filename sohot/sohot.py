@@ -87,7 +87,8 @@ class SoftHoeffdingTree(nn.Module):
         self.growth_allowed = True
 
     def total_node_cnt(self):
-        return sum(1 for _ in self.parameters())
+        return len(self.weights)
+        # return sum(1 for _ in self.parameters())
 
     def decision_node_cnt(self):
         n = sum(1 for _ in self.parameters())

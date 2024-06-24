@@ -15,7 +15,8 @@ def get_parameter_sohot(dataset_name):
     ensemble_seeds = [s for s in range(trees_num)]
     alpha = 0.3
     if dataset_name in ['hyperplane10_0001', 'hyperplane10_001', 'randomrbf50_0001', 'randomrbf50_001',
-                        'agrawal_abrupt_drift', 'agrawal_gradual_drift', 'agrawal_real_gradual_drift']:
+                        'agrawal_abrupt_drift', 'agrawal_perturbation', 'agrawal_gradual_drift',
+                        'agrawal_real_gradual_drift']:
         ssp = 10
 
     return {'max_depth': max_depth, 'ssp': ssp, 'lr': lr, 'batch_size': batch_size, 'trees_num': trees_num,
@@ -28,8 +29,8 @@ def get_parameter_ht(dataset_name, limit_n_nodes_ht=False):
     grace_period = 200
     num_internal_nodes = None
     if limit_n_nodes_ht:
-        # Benchmarking: 10 * (2^(7+1)-2)/2 = 1270 to ensure the number of internal nodes is comparable to SoHoT
-        num_internal_nodes = 1270
+        # Hyperparameter tuning: Allow only (2^(7+1)-2)/2 = 127 internal nodes to have trees of similar dimension
+        num_internal_nodes = 127
     max_depth = None
     split_criterion = 'info_gain'
     delta = 1e-7
