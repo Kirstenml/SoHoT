@@ -4,12 +4,13 @@ from moa.core import Utils
 
 
 class ModelPool:
-    def __init__(self, models, k):
+    def __init__(self, models, k, is_target_class=True):
         self.pool = [(model, ADWIN(delta=1e-5)) for model in models]
         self.pool_size = len(models)
         self.k = k
         self.num_instances_to_train_all = 100
         self.num_instances_trained = 0
+        self.is_target_class = is_target_class
 
     @staticmethod
     def _get_performance(pool_entry):
@@ -18,16 +19,29 @@ class ModelPool:
     def _update_detectors(self, instance):
         for model, detector in self.pool:
             y_pred = model.predict(instance)
-            detector.add_element(instance.y_index == y_pred)
+            if self.is_target_class:
+                detector.add_element(instance.y_index == y_pred)
+            else:
+                if y_pred is None: y_pred = 0.
+                detector.add_element((instance.y_value - y_pred)**2)
 
     def _get_performance_sorted_indices(self):
-        return np.argsort([self._get_performance(p) for p in self.pool])
+        if self.is_target_class:
+            return np.argsort([self._get_performance(p) for p in self.pool])[::-1]
+        else:
+            return np.argsort([self._get_performance(p) for p in self.pool])
 
     def predict(self, instance):
-        return Utils.maxIndex(self.predict_proba(instance))
+        if self.is_target_class:
+            return Utils.maxIndex(self.predict_proba(instance))
+        best_model_idx = self._get_performance_sorted_indices()[0]
+        return self.pool[best_model_idx][0].predict(instance)
 
     def predict_proba(self, instance):
-        best_model_idx = self._get_performance_sorted_indices()[-1]
+        if self.is_target_class:
+            best_model_idx = self._get_performance_sorted_indices()[-1]
+        else:
+            best_model_idx = self._get_performance_sorted_indices()[0]
         return self.pool[best_model_idx][0].predict_proba(instance)
 
     def train(self, instance):

@@ -4,6 +4,7 @@ import os
 import random
 import pmlb
 import gzip
+from pathlib import Path
 
 if not os.path.exists("data"): os.makedirs("data")
 if not os.path.exists("data/ctgan"): os.makedirs("data/ctgan")
@@ -14,7 +15,7 @@ if not os.path.exists("data/ctgan"): os.makedirs("data/ctgan")
 #           Select a random but specific class 𝑐_1
 #           Sample approx. oversampling_rate examples which belong to 𝑐_1 (Oversampling step)
 def train_ctgan(dataset_name='sleep', n_generate=10 ** 6, epochs=100, drift=True, n_drift=10, verbose=False,
-                oversample_rate=0.75, seed=42, data_dir='data'):
+                oversample_rate=0.75, seed=42, data_dir='data', name_args=""):
     if verbose: print(
         "Generate synthetic data from {} with oversampling rate: {}".format(dataset_name, oversample_rate))
     data, discrete_col, targets = choose_data(dataset_name, data_dir)
@@ -28,31 +29,37 @@ def train_ctgan(dataset_name='sleep', n_generate=10 ** 6, epochs=100, drift=True
         len_drift = int(n_generate // n_drift)
         synthetic_data = ctgan.sample(len_drift)
         tolerance = int((oversample_rate * len_drift) // 10)
-    for i in range(1, n_drift):
-        if drift and i % 2 == 1:
-            target_rand = targets[random.randint(0, len(targets) - 1)]
-            if verbose: print("{}. Drift: Oversample target class: {}".format(i, target_rand))
-            d = ctgan.sample(len_drift)
-            d_target = d[d['target'] == target_rand]
-            d_not_target = d[d['target'] != target_rand]
-            while d_target.shape[0] < int(oversample_rate * len_drift) - tolerance:
-                resampled_d = ctgan.sample(len_drift)
-                d_target = pd.concat([d_target, resampled_d[resampled_d['target'] == target_rand]])
-                d_not_target = pd.concat([d_not_target, resampled_d[resampled_d['target'] != target_rand]])
+        for i in range(1, n_drift):
+            if drift and i % 2 == 1:
+                target_rand = targets[random.randint(0, len(targets) - 1)]
+                if verbose: print("{}. Drift: Oversample target class: {}".format(i, target_rand))
+                d = ctgan.sample(len_drift)
+                d_target = d[d['target'] == target_rand]
+                d_not_target = d[d['target'] != target_rand]
+                while d_target.shape[0] < int(oversample_rate * len_drift) - tolerance:
+                    resampled_d = ctgan.sample(len_drift)
+                    d_target = pd.concat([d_target, resampled_d[resampled_d['target'] == target_rand]])
+                    d_not_target = pd.concat([d_not_target, resampled_d[resampled_d['target'] != target_rand]])
 
-            n_target_remaining = min(d_target.shape[0], int(oversample_rate * len_drift) + tolerance)
-            n_not_target_remaining = len_drift - n_target_remaining
-            d = pd.concat([d_target.iloc[:n_target_remaining, :], d_not_target.iloc[:n_not_target_remaining, :]],
-                          axis=0)
-            # shuffle the rows of the dataframe
-            d = d.sample(frac=1)
-        else:
-            d = ctgan.sample(len_drift)
-        synthetic_data = pd.concat([synthetic_data, d], axis=0)
+                n_target_remaining = min(d_target.shape[0], int(oversample_rate * len_drift) + tolerance)
+                n_not_target_remaining = len_drift - n_target_remaining
+                d = pd.concat([d_target.iloc[:n_target_remaining, :], d_not_target.iloc[:n_not_target_remaining, :]],
+                              axis=0)
+                # shuffle the rows of the dataframe
+                d = d.sample(frac=1)
+            else:
+                d = ctgan.sample(len_drift)
+            synthetic_data = pd.concat([synthetic_data, d], axis=0)
+    else:
+        synthetic_data = ctgan.sample(n_generate)
 
     # Write synthetic data to file
-    synthetic_data.to_csv(f"{data_dir}/ctgan/seed_{seed}/oversample_{oversample_rate}/{dataset_name}.csv",
-                          index=False)
+    if drift:
+        path_dir = f'{data_dir}/ctgan/seed_{seed}/oversample_{oversample_rate}'
+    else:
+        path_dir = f'{data_dir}/ctgan/seed_{seed}/stationary'
+    Path(path_dir).mkdir(parents=True, exist_ok=True)
+    synthetic_data.to_csv(f"{path_dir}/{dataset_name}{name_args}.csv", index=False)
     if verbose:
         for t_class in targets:
             print(
@@ -72,7 +79,8 @@ def choose_data(dataset_name, data_dir):
     pmlb_path = f"{data_dir}/downloaded_datasets/{dataset_name}.tsv"
     # Check if data is downloaded yet and if not download it
     download_data(dataset_name, data_dir, pmlb_path)
-    if dataset_name.__eq__('sleep'):
+    if dataset_name.startswith('sleep'):
+        pmlb_path = f"{data_dir}/downloaded_datasets/sleep.tsv"
         data = pd.read_csv(pmlb_path, sep='\t', skiprows=0, header=0)
         discrete_col = ['V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11', 'V12', 'target']
         targets = [0, 1, 2, 3]
@@ -95,7 +103,8 @@ def choose_data(dataset_name, data_dir):
         discrete_col = ['A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13', 'A14', 'A15', 'A16',
                         'target']
         targets = [1, 2, 3]
-    elif dataset_name.__eq__('twonorm'):
+    elif dataset_name.startswith('twonorm'):
+        pmlb_path = f"{data_dir}/downloaded_datasets/twonorm.tsv"
         data = pd.read_csv(pmlb_path, sep='\t', skiprows=0, header=0)
         discrete_col = ['target']
         targets = [0, 1]

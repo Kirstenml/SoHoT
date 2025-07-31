@@ -1,5 +1,5 @@
-from capymoa.datasets import Electricity, Covtype
-from capymoa.stream.generator import AgrawalGenerator, RandomRBFGeneratorDrift, SEA, HyperPlaneClassification
+from capymoa.datasets import Electricity, Covtype, Fried
+from capymoa.stream.generator import AgrawalGenerator, RandomRBFGeneratorDrift, SEA, HyperPlaneClassification, HyperPlaneRegression
 from capymoa.stream import ARFFStream
 import pandas as pd
 from capymoa.stream.drift import DriftStream, AbruptDrift, GradualDrift
@@ -9,7 +9,9 @@ from pathlib import Path
 import zipfile
 import gzip
 import tarfile
-from ctgan_pmlb import train_ctgan
+import csv
+from datetime import datetime
+from benchmark.ctgan_pmlb import train_ctgan
 
 
 def create_arff(csv_data_path, data_name, data_dir, feature_names=None, index_col=None, missing_value=False,
@@ -75,6 +77,56 @@ def create_arff(csv_data_path, data_name, data_dir, feature_names=None, index_co
                 else:
                     row_values.append(val)
             f.write(','.join(map(str, row_values)) + '\n')
+
+
+def bike_to_arff(input_file, output_file):
+    with open(input_file, 'r', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        attributes = [
+            "@RELATION bike_data",
+            "",
+            "@ATTRIBUTE year NUMERIC",
+            "@ATTRIBUTE month NUMERIC",
+            "@ATTRIBUTE day NUMERIC",
+            "@ATTRIBUTE hour NUMERIC",
+            "@ATTRIBUTE minute NUMERIC",
+            "@ATTRIBUTE station {metro-canal-du-midi, place-des-carmes, place-esquirol, pomme, place-jeanne-darc}",
+            "@ATTRIBUTE clouds NUMERIC",
+            # "@ATTRIBUTE description {light rain, scattered clouds, clear sky, broken clouds, ...}",
+            "@ATTRIBUTE humidity NUMERIC",
+            "@ATTRIBUTE pressure NUMERIC",
+            "@ATTRIBUTE temperature NUMERIC",
+            "@ATTRIBUTE wind NUMERIC",
+            "@ATTRIBUTE bikes NUMERIC",
+            "",
+            "@DATA"
+        ]
+
+        rows = []
+        for row in reader:
+            # Parse datetime
+            dt = datetime.strptime(row['moment'], "%Y-%m-%d %H:%M:%S")
+            values = [
+                dt.year,
+                dt.month,
+                dt.day,
+                dt.hour,
+                dt.minute,
+                f"'{row['station']}'",  # Quote strings
+                int(row['clouds']),
+                # f"'{row['description']}'",
+                int(row['humidity']),
+                float(row['pressure']),
+                float(row['temperature']),
+                float(row['wind']),
+                int(row['bikes'])
+            ]
+            rows.append(",".join(map(str, values)))
+
+    # Write to ARFF file
+    with open(output_file, 'w', encoding='utf-8') as arff:
+        arff.write("\n".join(attributes) + "\n")
+        arff.write("\n".join(rows))
 
 
 def load_data_stream(dataset_name, data_dir="./benchmark/data", seed=1):
@@ -158,16 +210,30 @@ def load_data_stream(dataset_name, data_dir="./benchmark/data", seed=1):
         if dataset_name.__eq__('kdd99_small'):
             n_instance_limit = 2500000
     # ------------------- CTGAN with real-world data -------------------
-    elif dataset_name.__eq__('sleep'):
-        csv_data_path = f'{data_dir}/ctgan/seed_{seed}/oversample_0.75/{dataset_name}.csv'
-        if not os.path.isfile(csv_data_path):   # Train CTGAN
-            train_ctgan(dataset_name=dataset_name, n_generate=n_instance_limit, seed=seed, data_dir=data_dir)
-        # Make arff file and then use ARFFStream to reach the correct schema
-        feature_names = ['V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11', 'V12', 'class']
-        create_arff(csv_data_path=csv_data_path, data_dir=data_dir,
-                    data_name=f'sleep_oversample_0.75_seed_{seed}', feature_names=feature_names, header=0,
-                    nominal_attribute_idx=[3])
-        data_stream = ARFFStream(path=f'{data_dir}/sleep_oversample_0.75_seed_{seed}.arff')
+    elif dataset_name.startswith('sleep'):      # sleep and sleep_stationary
+        if dataset_name.__eq__('sleep'):
+            csv_data_path = f'{data_dir}/ctgan/seed_{seed}/oversample_0.75/{dataset_name}.csv'
+            data_name_arff = f'sleep_oversample_0.75_seed_{seed}'
+        else:
+            csv_data_path = f'{data_dir}/ctgan/seed_{seed}/stationary/{dataset_name[:10]}.csv'
+            data_name_arff = f'{dataset_name}_seed_{seed}'
+
+        print(f'ARFF file name: {data_dir}/{data_name_arff}')
+        if not os.path.isfile(f'{data_dir}/{data_name_arff}.arff'):
+            if not os.path.isfile(csv_data_path):   # Train CTGAN
+                if dataset_name.__eq__('sleep'):
+                    train_ctgan(dataset_name=dataset_name, n_generate=n_instance_limit, seed=seed, data_dir=data_dir)
+                elif dataset_name.__eq__('sleep_10e6_stationary'):
+                    train_ctgan(dataset_name='sleep', n_generate=10**6, seed=seed, data_dir=data_dir, epochs=50,
+                                drift=False, name_args='_10e6')
+                elif dataset_name.__eq__('sleep_10e7_stationary'):
+                    train_ctgan(dataset_name='sleep', n_generate=10**7, seed=seed, data_dir=data_dir, epochs=50,
+                                drift=False, name_args='_10e7')
+            # Make arff file and then use ARFFStream to reach the correct schema
+            feature_names = ['V0', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6', 'V7', 'V8', 'V9', 'V10', 'V11', 'V12', 'class']
+            create_arff(csv_data_path=csv_data_path, data_dir=data_dir, data_name=data_name_arff,
+                        feature_names=feature_names, header=0, nominal_attribute_idx=[3])
+        data_stream = ARFFStream(path=f'{data_dir}/{data_name_arff}.arff')
     elif dataset_name.__eq__('ann_thyroid'):
         csv_data_path = f'{data_dir}/ctgan/seed_{seed}/oversample_0.75/{dataset_name}.csv'
         if not os.path.isfile(csv_data_path):   # Train CTGAN
@@ -202,15 +268,29 @@ def load_data_stream(dataset_name, data_dir="./benchmark/data", seed=1):
         create_arff(csv_data_path=f'{data_dir}/ctgan/seed_{seed}/oversample_0.75/nursery.csv', data_dir=data_dir,
                     data_name=f'nursery_oversample_0.75_seed_{seed}', feature_names=feature_names, header=0)
         data_stream = ARFFStream(path=f'{data_dir}/nursery_oversample_0.75_seed_{seed}.arff')
-    elif dataset_name.__eq__('twonorm'):
-        csv_data_path = f'{data_dir}/ctgan/seed_{seed}/oversample_0.75/{dataset_name}.csv'
-        if not os.path.isfile(csv_data_path):   # Train CTGAN
-            train_ctgan(dataset_name=dataset_name, n_generate=n_instance_limit, seed=seed, data_dir=data_dir)
-        feature_names = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13', 'A14', 'A15',
-                         'A16', 'A17', 'A18', 'A19', 'A20', 'class']
-        create_arff(csv_data_path=f'{data_dir}/ctgan/seed_{seed}/oversample_0.75/twonorm.csv', data_dir=data_dir,
-                    data_name=f'twonorm_oversample_0.75_seed_{seed}', feature_names=feature_names, header=0)
-        data_stream = ARFFStream(path=f'{data_dir}/twonorm_oversample_0.75_seed_{seed}.arff')
+    elif dataset_name.startswith('twonorm'):
+        if dataset_name.__eq__('twonorm'):
+            csv_data_path = f'{data_dir}/ctgan/seed_{seed}/oversample_0.75/{dataset_name}.csv'
+            data_name_arff = f'twonorm_oversample_0.75_seed_{seed}'
+        else:
+            csv_data_path = f'{data_dir}/ctgan/seed_{seed}/stationary/{dataset_name[:12]}.csv'
+            data_name_arff = f'{dataset_name}_seed_{seed}'
+
+        if not os.path.isfile(f'{data_dir}/{data_name_arff}.arff'):
+            if not os.path.isfile(csv_data_path):   # Train CTGAN
+                if dataset_name.__eq__('twonorm'):
+                    train_ctgan(dataset_name=dataset_name, n_generate=n_instance_limit, seed=seed, data_dir=data_dir)
+                elif dataset_name.__eq__('twonorm_10e6_stationary'):
+                    train_ctgan(dataset_name='twonorm', n_generate=10 ** 6, seed=seed, data_dir=data_dir, epochs=50,
+                                drift=False, name_args='_10e6')
+                elif dataset_name.__eq__('twonorm_10e7_stationary'):
+                    train_ctgan(dataset_name='twonorm', n_generate=10 ** 7, seed=seed, data_dir=data_dir, epochs=50,
+                                drift=False, name_args='_10e7')
+            feature_names = ['A1', 'A2', 'A3', 'A4', 'A5', 'A6', 'A7', 'A8', 'A9', 'A10', 'A11', 'A12', 'A13', 'A14', 'A15',
+                             'A16', 'A17', 'A18', 'A19', 'A20', 'class']
+            create_arff(csv_data_path=csv_data_path, data_dir=data_dir, data_name=data_name_arff,
+                        feature_names=feature_names, header=0)
+        data_stream = ARFFStream(path=f'{data_dir}/{data_name_arff}.arff')
     elif dataset_name.__eq__('optdigits'):
         csv_data_path = f'{data_dir}/ctgan/seed_{seed}/oversample_0.75/{dataset_name}.csv'
         if not os.path.isfile(csv_data_path):   # Train CTGAN
@@ -316,5 +396,21 @@ def load_data_stream(dataset_name, data_dir="./benchmark/data", seed=1):
     elif dataset_name.__eq__('HYP_m'):
         data_stream = HyperPlaneClassification(instance_random_seed=seed, number_of_classes=2, number_of_attributes=10,
                                                number_of_drifting_attributes=10, magnitude_of_change=0.0001)
+
+    # ------------------- Regression -------------------
+    elif dataset_name.__eq__('Fried'):
+        data_stream = Fried(directory=data_dir)     # + "/downloaded_datasets"
+    elif dataset_name.__eq__('HYP_reg'):
+        data_stream = HyperPlaneRegression(instance_random_seed=seed, number_of_classes=2, number_of_attributes=10,
+                                           number_of_drifting_attributes=10, magnitude_of_change=0.0001)
+    elif dataset_name.__eq__('house_8l'):
+        data_stream = ARFFStream(path=f'{data_dir}/dataset_2204_house_8L.arff')
+    elif dataset_name.__eq__('bikes'):
+        # Convert year, month, day, hour, minute, second (leave out) to attributes
+        data_path = f'{data_dir}/bikes.arff'
+        if not os.path.isfile(data_path):
+            # todo add automatic download: https://maxhalford.github.io/files/datasets/toulouse_bikes.zip
+            bike_to_arff(f"{data_dir}/downloaded_datasets/toulouse_bikes.csv", data_path)
+        data_stream = ARFFStream(path=data_path)
 
     return data_stream, n_instance_limit

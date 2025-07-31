@@ -46,15 +46,17 @@ class TreeEnsembleLayerStreaming:
         self.use_normalization = use_normalization
         self.means = [stats.Mean() for _ in range(self.num_attributes)]
         self.variances = [stats.Var() for _ in range(self.num_attributes)]
+        self.mean_target = stats.Mean()
+        self.variance_target = stats.Var()
 
         self.measure_transparency = measure_transparency
         self.total_n_important_feat = 0
         self.n_instances_seen = 0
 
-    def _get_normalized_value(self, value, index):
-        self.variances[index].update(value)
+    def _get_normalized_value(self, value, index, update_stats=True):
+        if update_stats: self.variances[index].update(value)
         variance = self.variances[index].get()
-        self.means[index].update(value)
+        if update_stats: self.means[index].update(value)
         mean = self.means[index].get()
         sd = math.sqrt(variance)
         if sd > 0.:
@@ -62,7 +64,7 @@ class TreeEnsembleLayerStreaming:
         else:
             return 0.
 
-    def transform_input(self, instance):
+    def transform_input(self, instance, update_stats=True):
         x = instance.x
         x_trans = []
         for i in range(self.num_attributes):
@@ -75,14 +77,33 @@ class TreeEnsembleLayerStreaming:
                 one_hot_encoded_attribute[int(value)] = 1.
                 x_trans.extend(one_hot_encoded_attribute)
             elif self.use_normalization:
-                x_trans.append(self._get_normalized_value(value, i))
+                x_trans.append(self._get_normalized_value(value, i, update_stats))
             else:
                 x_trans.append(value)
         return np.array([x_trans])
 
+    def _transform_regression_label(self, target):
+        # print("Target before transformation: ", target)
+        self.variance_target.update(target)
+        variance = self.variance_target.get()
+        self.mean_target.update(target)
+        mean = self.mean_target.get()
+        sd = math.sqrt(variance)
+        if sd > 0.:
+            return (target - mean) / (3. * sd)
+        else:
+            return 0.
+
+    def _revert_regression_label_transformation(self, t):
+        # print(f"Target: {t}, sd: {math.sqrt(self.variance_target.get())}, mean: {self.mean_target.get()}")
+        return t * 3 * math.sqrt(self.variance_target.get()) + self.mean_target.get()
+
     def transform_label(self, instance):
-        y_transform = [0.] * self.output_logits_dim
-        y_transform[instance.y_index] = 1.
+        if self.output_logits_dim > 1:
+            y_transform = [0.] * self.output_logits_dim
+            y_transform[instance.y_index] = 1.
+        else:       # Regression
+            y_transform = [self._transform_regression_label(instance.y_value)]
         return np.array([y_transform])
 
     # Measures the length of the explanation for each sample routing (need to be called after training)
@@ -141,7 +162,16 @@ class TreeEnsembleLayerStreaming:
         return self.total_n_important_feat / (self.n_instances_seen * (pow(2, self.depth) - 1))
 
     def predict(self, instance):
-        return np.argmax(self.predict_proba(instance))
+        if self.output_logits_dim > 1:
+            return np.argmax(self.predict_proba(instance))
+        # In case of regression:
+        x = self.transform_input(instance)
+        y_pred = self.model(x, training=False)
+        if self.batch_size == 1:
+            y_pred = y_pred.numpy()[0][0]
+        y_pred = self._revert_regression_label_transformation(y_pred)
+        # print("Rescaled prediction:", y_pred)
+        return y_pred
 
     def predict_proba(self, instance):
         x = self.transform_input(instance)
@@ -152,8 +182,9 @@ class TreeEnsembleLayerStreaming:
             return tf.nn.softmax(y_pred).numpy()
 
     def train(self, instance):
-        x = self.transform_input(instance)
+        x = self.transform_input(instance, update_stats=False)
         y = self.transform_label(instance)
+        # print(f"Transformed y: {y}")
         # self._count_reachable_leaves(x)
 
         self.model.train_on_batch(x, y)

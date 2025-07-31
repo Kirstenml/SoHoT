@@ -9,7 +9,7 @@ from .tree_visualization import SohotVisualization
 
 class SoftHoeffdingTreeLayer(nn.Module):
     def __init__(self, schema, ssp=1.0, max_depth=7, trees_num=10, split_confidence=1e-6,
-                 tie_threshold=0.05, grace_period=600, is_target_class=True, average_output=False,
+                 tie_threshold=0.05, grace_period=600, average_output=False,
                  seed=None, alpha=0.3, optimizer='adam', lr=0.01):
         super(SoftHoeffdingTreeLayer, self).__init__()
         self.schema = schema
@@ -31,6 +31,10 @@ class SoftHoeffdingTreeLayer(nn.Module):
         self.use_normalization = True
         self.means = [stats.Mean() for _ in range(self.num_attributes)]
         self.variances = [stats.Var() for _ in range(self.num_attributes)]
+        # Standardize target (rescale it back for prediction)
+        self.use_target_normalization = True
+        self.mean_target = stats.Mean()
+        self.variance_target = stats.Var()
 
         if seed is None:
             seeds = [None] * trees_num
@@ -53,10 +57,13 @@ class SoftHoeffdingTreeLayer(nn.Module):
             self.optim = torch.optim.Adam(self.parameters(), lr=self.lr)
         self.optim.zero_grad()
         self.old_params = sum(1 for _ in self.parameters())
-        self.criterion = torch.nn.CrossEntropyLoss()
+        if self.output_dim == 1:        # Regression
+            self.criterion = torch.nn.MSELoss()
+        else:       # Classification
+            self.criterion = torch.nn.CrossEntropyLoss()
         self.softmax = torch.nn.Softmax(dim=-1)
 
-        self.is_target_class = is_target_class
+        self.is_target_class = self.output_dim > 1
         self.average_output = average_output
 
         # Map tree index to tree visualization object
@@ -71,7 +78,9 @@ class SoftHoeffdingTreeLayer(nn.Module):
             x = torch.stack(outputs, dim=0).mean(dim=0)
         else:
             x = torch.stack(outputs, dim=0).sum(dim=0)
-        return self.softmax(x)
+        if self.is_target_class:
+            return self.softmax(x)
+        return x
 
     def _get_normalized_value(self, value, index):
         self.variances[index].update(value)
@@ -103,18 +112,47 @@ class SoftHoeffdingTreeLayer(nn.Module):
                 x_trans.append(value)
         return torch.tensor([x_trans], dtype=torch.float32)
 
+    def transform_target(self, target):
+        self.variance_target.update(target)
+        variance = self.variance_target.get()
+        self.mean_target.update(target)
+        mean = self.mean_target.get()
+        sd = math.sqrt(variance)
+        if sd > 0.:
+            return (target - mean) / (3. * sd)
+        else:
+            return 0.
+
+    def _revert_target_transformation(self, t):
+        return t * 3 * math.sqrt(self.variance_target.get()) + self.mean_target.get()
+
+    def get_y_target(self, instance):
+        if not self.is_target_class:
+            target = instance.y_value
+            if self.use_target_normalization:
+                target = self.transform_target(target)
+        else:
+            return torch.tensor([instance.y_index], dtype=torch.long)
+        return torch.tensor([target])
+
     def predict_proba(self, instance):
         x_trans = self.transform_input(instance)
-        return self.forward(x_trans, torch.tensor([instance.y_index], dtype=torch.long))
+        y = self.get_y_target(instance)
+        return self.forward(x_trans, y)
 
     def predict(self, instance):
-        return torch.argmax(self.predict_proba(instance)).item()
+        if self.is_target_class:
+            return torch.argmax(self.predict_proba(instance)).item()
+        y_pred = self.predict_proba(instance).detach().item()
+        if self.use_target_normalization:
+            y_pred = self._revert_target_transformation(y_pred)
+        return y_pred
 
     def train(self, instance):
         self.samples_seen += 1
         # todo perform forward pass and store information - does it make sense for larger batch sizes?
         y_pred = self.predict_proba(instance)
-        y_target = torch.tensor([instance.y_index], dtype=torch.long)
+        y_target = self.get_y_target(instance)
         # If the number of parameters has changed, update the optimizer such that the new weight
         # parameter are registered and also updated in the backward pass
         if self.old_params != sum(1 for _ in self.parameters()):

@@ -5,7 +5,7 @@ import torch
 import torch.nn as nn
 from .internal_node import Node
 from .leaf_node import LeafNode
-from river.tree.split_criterion import InfoGainSplitCriterion, GiniSplitCriterion, HellingerDistanceCriterion
+from river.tree.split_criterion import InfoGainSplitCriterion, GiniSplitCriterion, HellingerDistanceCriterion, VarianceReductionSplitCriterion
 import numpy as np
 from .sohot_function import SoHoTFunction
 from .sohot_helpers import SplitDecision
@@ -24,6 +24,7 @@ class SoftHoeffdingTree(nn.Module):
                  tie_threshold=0.05,
                  grace_period=600,
                  remove_poor_attrs=False,
+                 min_samples_split=5,
                  min_branch_fraction=0.01,
                  seed=None):
         """
@@ -65,24 +66,29 @@ class SoftHoeffdingTree(nn.Module):
         self.tie_threshold = tie_threshold
         self.grace_period = grace_period
         self.remove_poor_attrs = remove_poor_attrs
+        self.min_samples_split = min_samples_split
 
         if seed is not None: torch.manual_seed(seed)
         # Add 't' (=top) weight in ordered torch dictionary
         self.weights = torch.nn.ParameterDict({'t': nn.Parameter(torch.FloatTensor(self.output_dim).uniform_(-0.01, 0.01),
                                                                  requires_grad=True)})
-        self.root = LeafNode()
+        self.root = LeafNode(is_classification=(self.output_dim > 1))
         self.root.sample_to_node_prob = 1.
 
-        # Set split criterion
-        if split_criterion.__eq__('info_gain'):
-            self.split_criterion = InfoGainSplitCriterion(min_branch_fraction=min_branch_fraction)
-        elif split_criterion.__eq__('gini'):
-            self.split_criterion = GiniSplitCriterion(min_branch_fraction=min_branch_fraction)
-        elif split_criterion.__eq__('hellinger'):
-            self.split_criterion = HellingerDistanceCriterion(min_branch_fraction=min_branch_fraction)
-        else:
-            self.split_criterion = InfoGainSplitCriterion()
-            print("Invalid split_criterion option {}', will use default '{}'".format(split_criterion, 'info_gain'))
+        # Set split criterion (distinguish between regression or classification)
+        if self.output_dim == 1:        # Regression
+            self.split_criterion = VarianceReductionSplitCriterion(min_samples_split=self.min_samples_split)
+            # print("Split criterion for regression tasks is set to 'Variance Reduction' by default.")
+        else:       # Classification
+            if split_criterion.__eq__('info_gain'):
+                self.split_criterion = InfoGainSplitCriterion(min_branch_fraction=min_branch_fraction)
+            elif split_criterion.__eq__('gini'):
+                self.split_criterion = GiniSplitCriterion(min_branch_fraction=min_branch_fraction)
+            elif split_criterion.__eq__('hellinger'):
+                self.split_criterion = HellingerDistanceCriterion(min_branch_fraction=min_branch_fraction)
+            else:
+                self.split_criterion = InfoGainSplitCriterion()
+                print(f"Invalid split_criterion option {split_criterion}', will use default 'info_gain'")
 
         self.growth_allowed = True
 
@@ -168,9 +174,16 @@ class SoftHoeffdingTree(nn.Module):
                                                         self.split_confidence, leaf.total_weight)
                 best_suggestion = best_split_suggestions[-1]
                 second_best_suggestion = best_split_suggestions[-2]
-                suggestion_merit_comparison = best_suggestion.merit - second_best_suggestion.merit
-                if suggestion_merit_comparison > hoeffding_bound or hoeffding_bound < self.tie_threshold:
-                    should_split = True
+
+                if self.output_dim == 1:    # Regression
+                    if best_suggestion.merit > 0.0 and (
+                            second_best_suggestion.merit / best_suggestion.merit < 1 - hoeffding_bound
+                            or hoeffding_bound < self.tie_threshold):
+                        should_split = True
+                else:       # Classification
+                    if best_suggestion.merit - second_best_suggestion.merit > hoeffding_bound \
+                            or hoeffding_bound < self.tie_threshold:
+                        should_split = True
                 # Remove poor attributes (=not promising attributes).
                 # See "Mining High-Speed Data Streams" by P. Domingos, G. Hulten.
                 if self.remove_poor_attrs:

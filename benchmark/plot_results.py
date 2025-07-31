@@ -40,16 +40,21 @@ def get_df_summary(data_names, seeds, model_names, metric, evaluation_method, da
     return table
 
 
-def make_latex_table(data_names, seeds, model_names, metric, evaluation_method, data_names_latex_format=None):
+def make_latex_table(data_names, seeds, model_names, metric, evaluation_method, data_names_latex_format=None,
+                     highlight_max=True):
     table = get_df_summary(data_names=data_names, seeds=seeds, model_names=model_names, metric=metric,
                            evaluation_method=evaluation_method, data_names_latex_format=data_names_latex_format)
 
     # Add mean ranks
-    ranks = table.rank(axis=1, method='average', ascending=False)
+    ranks = table.rank(axis=1, method='average', ascending=False if highlight_max else True)
     mean_ranks = ranks.mean()
     table.loc['Mean Rank'] = mean_ranks
 
-    print(table.style.highlight_max(axis=1, props="textbf:--rwrap;").format(precision=3).to_latex())
+    if highlight_max:
+        print(table.style.highlight_max(axis=1, props="textbf:--rwrap;").format(precision=3).to_latex())
+    else:
+        print(table.style.highlight_min(axis=1, props="textbf:--rwrap;").format(precision=3).to_latex())
+
 
 # Paired t-test
 def get_significances(data_names, seeds, model_names, metric, evaluation_method, significance_level=0.05):
@@ -168,7 +173,9 @@ def get_df_efficiency(data_names, seeds, model_names, evaluation_method, data_na
     table_tree_size = get_df_tree_size(data_names, seeds, evaluation_method, data_names_latex_format)
     table_tree_size_log = table_tree_size.applymap(np.log2)
     table_auc = get_df_summary(data_names, seeds, model_names, 'Auroc', evaluation_method, data_names_latex_format)
-    return table_auc.div(table_tree_size_log)
+    table_auc = table_auc.div(table_tree_size_log)
+    table_auc = table_auc[model_names]
+    return table_auc
 
 
 def compare_number_of_nodes(data_names, seeds, evaluation_method, data_names_latex_format):
@@ -193,6 +200,7 @@ def compare_number_of_nodes(data_names, seeds, evaluation_method, data_names_lat
 
 def get_table_performance_complexity(data_names, seeds, evaluation_method, data_names_latex_format):
     model_names = ['SoHoT', 'HT', 'HAT', 'EFDT', 'SGDClassifier', 'TEL']
+
     # Get Auroc table
     table_auc = get_df_summary(data_names, seeds, model_names, 'Auroc', evaluation_method)
     # Get efficiency table
@@ -311,26 +319,40 @@ if __name__ == '__main__':
     model_names_latex_format = {'SoHoT': 'SoHoT', 'HT': 'HT', 'HT_limit': '$\\text{HT}_{\\text{limit}}$', 'HAT': 'HAT',
                                 'EFDT': 'EFDT', 'SGDClassifier': 'SGDClassifier', 'TEL': 'ST'}
 
-    # Figure A1: Average number of nodes
+    # Figure B2: Average number of nodes
     compare_number_of_nodes(data_names, seeds, evaluation_method, data_names_latex_format)
-
-    # Table 1: Results in terms of AUROC and efficiency
+    #
+    # # Table 3: Results in terms of AUROC and efficiency
     get_table_performance_complexity(data_names, seeds, evaluation_method, data_names_latex_format)
 
-    # Figure 4: Heatmap with paired t-test
+    # # Figure 5: Heatmap with paired t-test
     significances_heatmap(data_names, seeds, ['SoHoT', 'HT', 'HAT', 'EFDT', 'TEL'], 'efficiency', evaluation_method,
                           model_names_latex_format)
-
-    # Figure 5, Figure A2: Critical difference diagram (efficiency, AUROC)
+    #
+    # # Figure 6, Figure B3: Critical difference diagram (efficiency, AUROC)
     get_cridd(data_names=data_names, seeds=seeds, model_names=['SoHoT', 'HT', 'HAT', 'EFDT', 'SGDClassifier', 'TEL'],
               metric=metric, evaluation_method=evaluation_method)
     get_cridd(data_names=data_names, seeds=seeds, model_names=['SoHoT', 'HT', 'HAT', 'EFDT', 'TEL'],
               metric='efficiency', evaluation_method=evaluation_method)
 
-    # Figure 8: Transparent tree expansion
-    visualize_tree_at = [2400, 2600, 4900, 5100, 7000, 7400, 7600]
+    # Figure 9: Transparent tree expansion
+    visualize_tree_at = [2400, 2600, 4899, 4900, 5100, 7000, 7400, 7600]
     plot_transparency(data_name='AGR_small', seed=1, visualize_tree_at=visualize_tree_at, save_img=True)
 
-    # Figure 9:
+    # Figure 10, B4:
     for data_name in ['RBF_f', 'SEA50']:
         compare_run_times(data_name=data_name, model_names=['SoHoT', 'TEL'], seeds=seeds)
+
+    # Table B2: Regression
+    make_latex_table(data_names=['Fried', 'HYP_reg', 'house_8l', 'bikes'], seeds=[0, 1, 2, 3, 4],
+                     model_names=["SoHoT_Reg", "HT_Reg", "HAT_Reg", "KNN_Reg", "SGD_Reg"],
+                     metric="rmse", evaluation_method="/hyperparameter_tuned_results_regression",
+                     data_names_latex_format=None, highlight_max=False)
+
+    # Table 4: Stationary data
+    for metric in ['Auroc', 'efficiency']:
+        make_latex_table(data_names=['sleep_10e7_stationary', 'twonorm_10e7_stationary'],
+                         seeds=[0, 1, 2, 3, 4],
+                         model_names=['SoHoT', 'HT', 'HAT', 'EFDT', 'SGDClassifier', 'TEL'],
+                         metric=metric, evaluation_method="/hyperparameter_tuned_results",
+                         data_names_latex_format=None, highlight_max=True)

@@ -1,10 +1,13 @@
 from capymoa.classifier import HoeffdingTree, SGDClassifier, HoeffdingAdaptiveTree, EFDT
-from capymoa.instance import Instance
+from capymoa.regressor import SGDRegressor
+from capymoa.instance import Instance, RegressionInstance
 from capymoa.splitcriteria import SplitCriterion
 from capymoa.stream import Schema
-from typing import Union
+from typing import Union, Optional, Literal
 import river
+from river import preprocessing
 import re
+import numpy as np
 
 
 # Note: - Epsilon data is not working for CapyMOA's Hoeffding Tree variants (due to the amount of attributes and
@@ -105,9 +108,9 @@ class HoeffdingAdaptiveTreeRiver(river.tree.HoeffdingAdaptiveTreeClassifier):
                               if schema.get_moa_header().attribute(i).isNominal()]
         leaf_preds = {'MajorityClass': 'mc', 'NaiveBayes': 'nb', 'NaiveBayesAdaptive': 'nba'}
         self.hat = river.tree.HoeffdingAdaptiveTreeClassifier(grace_period=grace_period, delta=confidence,
-                                                             nominal_attributes=nominal_attributes,
-                                                             leaf_prediction=leaf_preds[leaf_prediction],
-                                                             seed=random_seed)
+                                                              nominal_attributes=nominal_attributes,
+                                                              leaf_prediction=leaf_preds[leaf_prediction],
+                                                              seed=random_seed)
 
     def river_input_format(self, x):
         return dict(zip([i for i in range(self.input_dim)], x))
@@ -163,3 +166,104 @@ class EFDTRiver(river.tree.ExtremelyFastDecisionTreeClassifier):
 
     def c_complexity(self):
         return self.efdt.n_nodes
+
+
+# ------------------------------------------ Regression ------------------------------------------
+
+class HoeffdingTreeRegressorRiver(river.tree.HoeffdingTreeRegressor):
+    def __init__(self, schema, grace_period=200, confidence=1e-07, leaf_prediction='adaptive', random_seed=42,
+                 limit=None):
+        self.input_dim = int(schema.get_num_attributes())
+        nominal_attributes = [i for i in range(self.input_dim)
+                              if schema.get_moa_header().attribute(i).isNominal()]
+        self.scaler = preprocessing.StandardScaler()
+        self.ht = (preprocessing.StandardScaler() | river.tree.HoeffdingTreeRegressor(grace_period=grace_period,
+                                                                                      delta=confidence,
+                                                                                      nominal_attributes=nominal_attributes,
+                                                                                      leaf_prediction=leaf_prediction,
+                                                                                      max_depth=limit))
+
+    def river_input_format(self, x):
+        return dict(zip([i for i in range(self.input_dim)], x))
+
+    def predict(self, instance: Instance):
+        x = self.river_input_format(instance.x)
+        return self.ht.predict_one(x=x)
+
+    def train(self, instance: Instance):
+        x = self.river_input_format(instance.x)
+        self.ht.learn_one(x=x, y=instance.y_value)
+
+    def c_complexity(self):
+        return self.ht[-1].n_nodes
+
+
+class HoeffdingAdaptiveTreeRegressorRiver(river.tree.HoeffdingAdaptiveTreeClassifier):
+    def __init__(self, schema, grace_period=200, confidence=1e-07, leaf_prediction='adaptive', random_seed=42):
+        self.input_dim = int(schema.get_num_attributes())
+        nominal_attributes = [i for i in range(self.input_dim) if schema.get_moa_header().attribute(i).isNominal()]
+        self.hat = (preprocessing.StandardScaler() | river.tree.HoeffdingAdaptiveTreeRegressor(
+            grace_period=grace_period, delta=confidence,
+            nominal_attributes=nominal_attributes,
+            leaf_prediction=leaf_prediction,
+            seed=random_seed))
+
+    def river_input_format(self, x):
+        return dict(zip([i for i in range(self.input_dim)], x))
+
+    def predict(self, instance: Instance):
+        x = self.river_input_format(instance.x)
+        return self.hat.predict_one(x=x)
+
+    def train(self, instance: Instance):
+        x = self.river_input_format(instance.x)
+        self.hat.learn_one(x=x, y=instance.y_value)
+
+    def c_complexity(self):
+        return self.hat[-1].n_nodes
+
+
+class SGDRegressorScale(SGDRegressor):
+    def __init__(self,
+                 schema: Schema,
+                 loss: Literal[
+                     "squared_error",
+                     "huber",
+                     "epsilon_insensitive",
+                     "squared_epsilon_insensitive",
+                 ] = "squared_error",
+                 penalty: Optional[Literal["l2", "l1", "elasticnet"]] = "l2",
+                 alpha: float = 0.0001,
+                 l1_ratio: float = 0.15,
+                 fit_intercept: bool = True,
+                 epsilon: float = 0.1,
+                 learning_rate: str = "invscaling",
+                 eta0: float = 0.01,
+                 random_seed: Optional[int] = None, ):
+        self.x_scaler = preprocessing.StandardScaler()
+        self.y_scaler = preprocessing.StandardScaler()
+        self.input_dim = int(schema.get_num_attributes())
+        super().__init__(schema, loss, penalty, alpha, l1_ratio, fit_intercept, epsilon, learning_rate, eta0,
+                         random_seed)
+
+    def scale_instance(self, instance):
+        # scale x values
+        x = dict(zip([i for i in range(self.input_dim)], instance.x))
+        self.x_scaler.learn_one(x)
+        x = self.x_scaler.transform_one(x)
+        # scale y value
+        y = {0: instance.y_value}
+        self.y_scaler.learn_one(y)
+        y = self.y_scaler.transform_one(y)
+        return RegressionInstance.from_array(schema=self.schema, x=np.array([x_i for x_i in x.values()]), y_value=y[0])
+
+    def predict(self, instance: RegressionInstance):
+        instance = self.scale_instance(instance)
+        y_pred = super().predict(instance)
+        # todo rescale y
+        return y_pred
+
+    def train(self, instance: RegressionInstance):
+        instance = self.scale_instance(instance)
+        super().train(instance)
+

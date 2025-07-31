@@ -39,3 +39,27 @@ tel_options: {
   smooth_step_param: [1, 10],
   learning_rate: [1e-2, 1e-3]
 }
+hoeffding_tree_reg_options: {
+  grace_period: [200, 400, 600],
+  confidence: [1e-3, 1e-4],
+  leaf_prediction: ['mean', 'adaptive']
+}
+hat_reg_options: {
+  grace_period: [200, 400, 600],
+  confidence: [1e-3, 1e-4],
+  leaf_prediction: ['mean', 'adaptive']
+}
+sgd_reg_options: {
+  loss: ['squared_error', 'huber'],
+  penalty: ['l2', 'l1'],
+  learning_rate: [
+    {lr: 'optimal', eta0: 0.0},
+    {lr: 'constant', eta0: 0.01},
+    {lr: 'invscaling', eta0: 0.01}
+    ]
+}
+knn_reg_options: {
+  k: [3, 6, 10],
+  median: [False, True],
+  window_size: [1000, 5000]
+}

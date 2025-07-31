@@ -2,15 +2,19 @@ from .internal_node import Node
 import torch
 from river.tree.utils import BranchFactory
 from river.tree.splitter import GaussianSplitter, TEBSTSplitter
-import river.stats
+from river.stats import Var
 
 
 class LeafNode:
 
-    def __init__(self, initial_stats=None):
+    def __init__(self, initial_stats=None, is_classification=True):
         super().__init__()
         self.sample_to_node_prob = 0.
-        self.splitter = GaussianSplitter()
+        self.is_classification = is_classification
+        if self.is_classification:
+            self.splitter = GaussianSplitter()
+        else:
+            self.splitter = TEBSTSplitter()
         # Each attribute should be observed by a splitter
         self.splitters = {}
         # observes all class values in the current leaf node
@@ -27,20 +31,30 @@ class LeafNode:
     def stats(self):
         return self._stats
 
+    # Target statistics (they differ in classification and regression tasks).
     @stats.setter
     def stats(self, stats):
-        self._stats = stats if stats is not None else {}
+        if self.is_classification:
+            self._stats = stats if stats is not None else {}
+        else:
+            self._stats = Var()
 
     @property
     def total_weight(self):
-        return sum(self.stats.values())
+        if self.is_classification:
+            return sum(self.stats.values())
+        else:
+            return self.stats.mean.n
 
     def update_stats(self, y, weight=1.0):
-        try:
-            self.stats[y] += weight
-        except KeyError:
-            self.stats[y] = weight
-            self.stats = dict(sorted(self.stats.items()))
+        if self.is_classification:
+            try:
+                self.stats[y] += weight
+            except KeyError:
+                self.stats[y] = weight
+                self.stats = dict(sorted(self.stats.items()))
+        else:
+            self.stats.update(y, weight)
 
     # see river/tree/nodes/leaf
     def update_splitters(self, x, y, weight=1.0):
@@ -70,6 +84,7 @@ class LeafNode:
         return best_suggestions
 
     def observed_class_distribution_is_pure(self):
+        if not self.is_classification: return False
         count = 0
         for weight in self.stats.values():
             if weight != 0:
@@ -93,13 +108,15 @@ class LeafNode:
                 previous_node.left = new_internal_node
             else:
                 previous_node.right = new_internal_node
-        left = LeafNode(output_dim)
-        right = LeafNode(output_dim)
+        # left = LeafNode(output_dim)
+        # right = LeafNode(output_dim)
+        left = LeafNode(is_classification=self.is_classification)
+        right = LeafNode(is_classification=self.is_classification)
         # Update resulting statistics for the new leaf nodes
         # Note: Empty the statistics, leaf prediction is based on the weight vectors
         #       Empty stats cause slower growth and the class distribution from stats is not needed for leaf prediction
         left_init_weight, right_init_weight = None, None
-        if children_stats:
+        if children_stats and self.is_classification:
             desired_len = 0.025
             left_stats_dist = torch.tensor([children_stats[0].get(target_idx, 0) for target_idx in range(output_dim)])
             left_init_weight = torch.mul(torch.div(left_stats_dist, torch.norm(left_stats_dist)), desired_len)

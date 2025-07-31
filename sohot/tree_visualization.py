@@ -39,7 +39,7 @@ class SohotVisualization:
 
         self.softmax = Softmax(dim=-1)
         self.font_size = 7.5      # 10 for paper
-        self.data_path = "data/images_sohot"   + "/gif"
+        self.data_path = "data/images_sohot"  # + "/gif"
 
     def get_fi_impact(self, node, x):
         if x is None:
@@ -82,11 +82,26 @@ class SohotVisualization:
             split_at_value = revert_transformation(split_at_value, feature_pos_before)
         return f"{feature_name} > {split_at_value:.2f}{impact}"
 
-    def visualize_soft_hoeffding_tree(self, X=None, print_idx=0, save_img=False, revert_transformation=None):
+    # todo only for paper figure
+    @staticmethod
+    def format_weight_vector(arr):
+        formatted_str = ', '.join(f"{x:.4f}" for x in arr)
+        if len(arr) > 4:
+            formatted_str = ""
+            for i in range(len(arr)):
+                formatted_str += f"{arr[i]:.4f}"
+                if i != len(arr) - 1: formatted_str += ","
+                if i % 5 == 0 and i != 0 and i != len(arr) - 1:
+                    formatted_str += "\n      "
+        return formatted_str
+
+    def visualize_soft_hoeffding_tree(self, X=None, print_idx=0, save_img=False, revert_transformation=None,
+                                      print_edge_labels=True):
         if save_img:
             Path(self.data_path).mkdir(parents=True, exist_ok=True)
         G = nx.Graph()
         node_label = {}
+        edge_label = {}
         G.add_node(self.sohot.root)
 
         # --------------- Tree has only one node ---------------
@@ -110,6 +125,9 @@ class SohotVisualization:
                                                                   revert_transformation=revert_transformation,
                                                                   split_at_value=self.sohot.root.split_test.split_at,
                                                                   impact=impact)
+                # todo Only for paper figure to show before and after:
+                # node_label[self.sohot.root] = f"w=({self.format_weight_vector(self.sohot.weights.get(self.sohot.root.orientation_sequence).detach().numpy())})"
+
             if self.sohot.root.right_leaf is None:
                 to_traverse = [self.sohot.root.right]
             else:
@@ -132,6 +150,17 @@ class SohotVisualization:
                                                         revert_transformation=revert_transformation,
                                                         split_at_value=i.split_test.split_at,
                                                         impact=impact)
+
+                    # todo Only for paper figure to show before and after:
+                    # node_label[i] = f"w=({self.format_weight_vector(self.sohot.weights.get(i.orientation_sequence).detach().numpy())})"
+
+                    if print_edge_labels:
+                        w_i = self.sohot.weights.get(prev.orientation_sequence)
+                        if prev.left is i:
+                            edge_label[(prev, i)] = "{:.2f}".format(prev.forward(X, w_i))
+                        else:
+                            edge_label[(prev, i)] = "{:.2f}".format(1. - prev.forward(X, w_i))
+
                     if i.right_leaf is None:
                         to_traverse.append(i.right)
                     else:
@@ -143,15 +172,24 @@ class SohotVisualization:
                     previous.append(i)
                     previous.append(i)
                 else:
+                    if print_edge_labels:
+                        w_i = self.sohot.weights.get(prev.orientation_sequence)
+                        if prev.left_leaf is i:
+                            edge_label[(prev, i)] = "{:.2f}".format(prev.forward(X, w_i))
+                        else:
+                            edge_label[(prev, i)] = "{:.2f}".format(1. - prev.forward(X, w_i))
                     # Use weight to show the probability distribution of this node
                     leaf_prob_dist = self.softmax(self.sohot.weights[i.orientation_sequence]).data.numpy()
                     leaf_prob_dist_str = ",".join(f"{num:.2f}" for num in leaf_prob_dist)
-                    node_label[i] = f"P(x->l)={i.sample_to_node_prob:.2f}\nDist:({leaf_prob_dist_str})"
+                    node_label[i] = f"P(x\u2192l)={i.sample_to_node_prob:.2f}\nDist:({leaf_prob_dist_str})"
 
-            # pos = self._hierarchy_pos(G, self.sohot.root, width=0.5, vert_gap=0.07)   # Change for paper
-            # label_shift, label_shift_leaf = 0.04, 0.03
-            pos = self._hierarchy_pos(G, self.sohot.root, width=3., vert_gap=0.2)
-            label_shift, label_shift_leaf = 0.08, 0.04
+                    # todo Only for paper figure to show before and after:
+                    # node_label[i] = f"P(x\u2192l)={i.sample_to_node_prob:.2f}\no=({self.format_weight_vector(self.sohot.weights.get(i.orientation_sequence).detach().numpy())})"
+
+            pos = self._hierarchy_pos(G, self.sohot.root, width=0.5, vert_gap=0.07)   # Change for paper
+            label_shift, label_shift_leaf = 0.04, 0.03
+            # pos = self._hierarchy_pos(G, self.sohot.root, width=3., vert_gap=0.2)
+            # label_shift, label_shift_leaf = 0.08, 0.04
 
         ax = plt.gca()
         if not save_img:
@@ -164,6 +202,9 @@ class SohotVisualization:
                                 verticalalignment='center',
                                 horizontalalignment='left',
                                 bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.3'))
+
+        if print_edge_labels:
+            nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_label, font_size=7)
 
         # Enlarge the figure to show all labels
         x_values, y_values = zip(*pos.values())
