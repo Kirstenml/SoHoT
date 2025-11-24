@@ -33,17 +33,30 @@ Soft Hoeffding tree evolving over the data stream generated with Agrawal generat
 ![til](./SoHoT.gif)
 
 ## Cite SoHoT
+First introduction of SoHoTs:
 ```
 @InProceedings{10.1007/978-3-031-78977-9_11,
-author="K{\"o}bschall, Kirsten
-and Hartung, Lisa
-and Kramer, Stefan",
-title="Soft Hoeffding Tree: A Transparent and Differentiable Model on Data Streams",
-booktitle="Discovery Science",
-year="2025",
-publisher="Springer Nature Switzerland",
-address="Cham",
-pages="167--182",
-isbn="978-3-031-78977-9"
+    author      =   "K{\"o}bschall, Kirsten and Hartung, Lisa and Kramer, Stefan",
+    title       =   "Soft Hoeffding Tree: A Transparent and Differentiable Model on Data Streams",
+    booktitle   =   "Discovery Science",
+    year        =   "2025",
+    publisher   =   "Springer Nature Switzerland",
+    address     =   "Cham",
+    pages       =   "167--182",
+    isbn        =   "978-3-031-78977-9"
+}
+```
+Journal article:
+```
+@article{10.1007/s10994-025-06906-x,
+  title         =   "Adaptive differentiable trees for transparent learning on data streams",
+  author        =   "K{\"o}bschall, Kirsten and Hartung, Lisa and Kramer, Stefan",
+  journal       =   "Machine Learning",
+  publisher     =   "Springer Science and Business Media LLC",
+  doi           =   "10.1007/s10994-025-06906-x",
+  volume        =   114,
+  number        =   11,
+  month         =   nov,
+  year          =   2025
 }
 ```
